@@ -1,0 +1,19 @@
+name = "grocery-list"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+# Static front-end served by the Worker
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Storage: a single JSON blob. Create the namespace with
+#   npx wrangler kv namespace create SPESA
+# and paste the id it prints here.
+[[kv_namespaces]]
+binding = "SPESA"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# Secrets do NOT go here. Set them with:
+#   npx wrangler secret put APP_PASSWORD
+#   npx wrangler secret put AUTH_SECRET

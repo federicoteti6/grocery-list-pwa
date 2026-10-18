@@ -1,0 +1,2 @@
+APP_PASSWORD=choose-a-password
+AUTH_SECRET=a-long-random-string

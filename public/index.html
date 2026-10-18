@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0f16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spesa">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="apple-touch-icon-512.png" sizes="512x512">
+<title>Lista della Spesa</title>
+<script src="jsbarcode.min.js"></script>
+<style>
+  :root{
+    --bg:#0f0f16; --bg2:#15151f; --card:#1c1c28; --card2:#232332;
+    --line:#2c2c3c; --txt:#ececf4; --mut:#9a9ab0; --mut2:#8586a0;
+    --acc:#a855f7; --acc2:#8b5cf6; --acc-dim:#3b2a5c;
+    --ok:#4ade80; --warn:#f5b544; --danger:#f87171;
+    --r:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding-top:env(safe-area-inset-top);
+    overscroll-behavior-y:none;
+  }
+  button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
+  input,select,textarea{font-family:inherit; font-size:16px}
+
+  /* ---- Login ---- */
+  #login{position:fixed; inset:0; display:none; place-items:center; padding:24px; background:var(--bg)}
+  #login .box{width:100%; max-width:340px; text-align:center}
+  #login h1{font-size:26px; margin:0 0 4px; font-weight:800; letter-spacing:-.5px}
+  #login p{color:var(--mut); margin:0 0 24px; font-size:14px}
+  .field{width:100%; padding:14px 16px; border-radius:14px; background:var(--card);
+    border:1px solid var(--line); color:var(--txt); outline:none}
+  .field:focus{border-color:var(--acc)}
+  .btn{width:100%; padding:14px; border-radius:14px; background:var(--acc); color:#fff;
+    font-weight:700; font-size:16px; margin-top:12px}
+  .btn:active{transform:scale(.98)}
+  .btn.ghost{background:var(--card2); color:var(--txt)}
+  .btn.danger{background:transparent; color:var(--danger); border:1px solid var(--danger)}
+  .err{color:var(--danger); font-size:13px; min-height:18px; margin-top:10px}
+
+  /* ---- App shell ---- */
+  #app{display:none; max-width:640px; margin:0 auto; min-height:100%;
+    padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  header.top{position:sticky; top:0; z-index:20; background:linear-gradient(180deg,var(--bg) 70%,transparent);
+    padding:14px 18px 10px}
+  .titlerow{display:flex; align-items:center; justify-content:space-between; gap:8px}
+  .titlerow h1{font-size:22px; margin:0; font-weight:800; letter-spacing:-.4px}
+  .titlerow h1 small{font-size:14px; font-weight:700; color:var(--acc); margin-left:8px; letter-spacing:0}
+  .sync{font-size:11px; padding:4px 9px; border-radius:20px; background:var(--card2); color:var(--mut)}
+  .sync.ok{color:var(--ok)} .sync.off{color:var(--warn)} .sync.sav{color:var(--acc)}
+
+  /* add bar */
+  .addbar{display:flex; gap:8px; margin-top:12px}
+  .addbar .wrap{flex:1; position:relative}
+  .addbar input{width:100%; padding:13px 16px; border-radius:26px; background:var(--card);
+    border:1px solid var(--line); color:var(--txt); outline:none}
+  .addbar input:focus{border-color:var(--acc)}
+  .addbar .add{width:50px; border-radius:26px; background:var(--acc); color:#fff; font-size:26px; font-weight:300; flex:none}
+  .addbar .note{width:46px; border-radius:26px; background:var(--card2); color:var(--acc); flex:none;
+    display:grid; place-items:center}
+  .addbar .note svg{width:21px; height:21px}
+
+  /* suggestions */
+  .chips{display:flex; gap:8px; overflow-x:auto; padding:12px 18px 4px; scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{white-space:nowrap; padding:8px 14px; border-radius:20px; background:var(--card);
+    border:1px solid var(--line); color:var(--txt); font-size:14px; flex:none}
+  .chip .st{color:var(--warn); margin-right:4px}
+  .chips-label{font-size:12px; color:var(--mut2); padding:14px 18px 0; text-transform:uppercase; letter-spacing:.5px; font-weight:700}
+  /* reparti come chip selezionabili nello sheet prodotto */
+  .deptchips{display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 4px}
+  .deptchips .chip{cursor:pointer}
+  .deptchips .chip.on{background:var(--acc-dim); border-color:var(--acc); color:var(--acc); font-weight:700}
+  /* ✕ per eliminare un reparto creato da me (sui reparti standard non c'è) */
+  .deptchips .chip .x{display:inline-block; margin:-2px -6px -2px 7px; padding:2px 6px; border-radius:50%;
+    font-size:11px; line-height:1.2; opacity:.55}
+  .deptchips .chip .x:active{background:rgba(248,113,113,.22); color:var(--danger); opacity:1}
+  .newdept{display:flex; gap:8px; margin-top:6px}
+  .newdept input{flex:1}
+  .newdept button{flex:none; width:52px; border-radius:14px; background:var(--card2); color:var(--acc); font-size:24px; font-weight:300}
+
+  /* segmented */
+  .seg{display:flex; background:var(--card); border-radius:12px; padding:3px; margin:12px 18px 0}
+  .seg button{flex:1; padding:8px; border-radius:9px; color:var(--mut); font-size:13px; font-weight:600}
+  .seg button.on{background:var(--acc2); color:#fff}
+
+  /* list */
+  .list{padding:8px 14px 0}
+  details.grp{margin:6px 0}
+  details.grp>summary{list-style:none; display:flex; align-items:center; gap:8px; padding:12px 6px 6px;
+    font-size:12px; font-weight:700; color:var(--mut); text-transform:uppercase; letter-spacing:.6px; cursor:pointer}
+  details.grp>summary::-webkit-details-marker{display:none}
+  details.grp>summary .caret{transition:transform .15s; color:var(--mut2)}
+  details.grp:not([open])>summary .caret{transform:rotate(-90deg)}
+  .row{display:flex; align-items:center; gap:12px; padding:13px 14px; background:var(--card);
+    border-radius:14px; margin:6px 0; border:1px solid transparent}
+  .row:active{background:var(--card2)}
+  .ck{width:26px; height:26px; border-radius:50%; border:2px solid var(--mut2); flex:none;
+    display:grid; place-items:center; transition:.12s}
+  .ck.on{background:var(--acc); border-color:var(--acc)}
+  .ck.on svg{opacity:1}
+  .ck svg{opacity:0; width:15px; height:15px}
+  .row .body{flex:1; min-width:0}
+  .row .nm{font-size:16px; font-weight:600}
+  .row .sub{font-size:13px; color:var(--mut); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .row.done .nm{text-decoration:line-through; color:var(--mut2)}
+  .row.done .ck{opacity:.9}
+  .qty{font-size:13px; font-weight:700; color:var(--acc); background:var(--acc-dim);
+    padding:3px 9px; border-radius:8px; flex:none}
+  .row .edit{color:var(--mut2); flex:none; padding:10px; margin:-6px -6px -6px 0}
+  .cart-h{font-size:12px; font-weight:700; color:var(--mut2); text-transform:uppercase;
+    letter-spacing:.6px; padding:18px 6px 4px; display:flex; justify-content:space-between; align-items:center}
+  .finish{font-size:12px; color:var(--acc); font-weight:700; text-transform:none; letter-spacing:0}
+
+  .empty{text-align:center; color:var(--mut2); padding:60px 30px; font-size:15px; line-height:1.5}
+  .empty .big{font-size:34px; margin-bottom:12px}
+
+  /* ---- Vista post-it ----
+     Stessi dati delle altre due viste, solo disegnati come un foglietto giallo:
+     tap sulla riga = presa, l'ultima riga resta sempre scrivibile. */
+  .paper{margin:12px 14px 0; padding:16px 18px 6px; border-radius:4px 4px 16px 4px;
+    background:linear-gradient(180deg,#fdf5c9,#f6e59a); color:#3b3320; position:relative;
+    box-shadow:0 12px 28px rgba(0,0,0,.45);
+    font-family:"Bradley Hand","Marker Felt",ui-rounded,-apple-system,cursive}
+  .paper::after{content:""; position:absolute; right:0; bottom:0; width:28px; height:28px;
+    background:linear-gradient(135deg,rgba(0,0,0,.16),rgba(0,0,0,0) 62%); border-radius:0 0 16px 0}
+  .paper .ph{display:flex; justify-content:space-between; align-items:baseline; gap:10px;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.8px; color:#8b7a44;
+    padding-bottom:8px; border-bottom:1px solid rgba(0,0,0,.12)}
+  .paper .ph .finish{color:#6f57b8}
+  .pline{display:flex; align-items:baseline; gap:10px; padding:12px 2px; position:relative;
+    border-bottom:1px solid rgba(0,0,0,.07); font-size:21px; font-weight:600; line-height:1.2}
+  .pline .txt{flex:1; min-width:0; word-break:break-word}
+  .pline .dt{font-size:15px; opacity:.55; font-weight:500}
+  .pline .q{flex:none; font-size:15px; opacity:.6}
+  .pline .pe{flex:none; padding:9px 8px 6px; margin:-8px -6px -6px 0; color:#3b3320; opacity:.4}
+  .pline .pe svg{width:15px; height:15px; display:block}
+  .pline.done{color:#9c9068}
+  .pline.done::after{content:""; position:absolute; left:0; right:26px; top:50%; height:2px;
+    background:#6f57b8; opacity:.7; border-radius:2px; transform:rotate(-.5deg); pointer-events:none}
+  .pnew{display:flex; align-items:baseline; gap:10px; padding:12px 2px}
+  .pnew .plus{opacity:.38; font-size:19px}
+  .pnew input{flex:1; min-width:0; background:transparent; border:none; outline:none; padding:0;
+    color:#3b3320; font-family:inherit; font-size:21px; font-weight:600}
+  .pnew input::placeholder{color:rgba(59,51,32,.34)}
+  .phint{color:var(--mut2); font-size:12px; text-align:center; padding:14px 24px 0; line-height:1.5}
+
+  /* ---- Toast ---- */
+  .toast{position:fixed; left:50%; z-index:60; bottom:calc(86px + env(safe-area-inset-bottom));
+    max-width:calc(100% - 32px); background:var(--card2); border:1px solid var(--line);
+    color:var(--txt); padding:11px 17px; border-radius:22px; font-size:14px; font-weight:600;
+    box-shadow:0 8px 26px rgba(0,0,0,.55); pointer-events:none; display:flex; align-items:center; gap:14px;
+    opacity:0; transform:translateX(-50%) translateY(14px); transition:.2s}
+  .toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+  .toast.act{pointer-events:auto}
+  .toast button{color:var(--acc); font-weight:800; font-size:14px; padding:4px 2px}
+
+  /* catalogo row extras */
+  .cat-toggle{font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; flex:none}
+  .cat-toggle.in{background:var(--acc-dim); color:var(--acc)}
+  .cat-toggle.out{background:var(--card2); color:var(--mut)}
+  .star{flex:none; padding:10px; margin:-6px; font-size:20px}
+
+  /* ---- Carte ---- */
+  .cardgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px 18px}
+  .lcard{border-radius:16px; padding:18px 16px; min-height:96px; display:flex; flex-direction:column;
+    justify-content:space-between; color:#fff; position:relative; overflow:hidden}
+  .lcard::after{content:""; position:absolute; inset:0; background:linear-gradient(135deg,rgba(255,255,255,.18),transparent 55%)}
+  .lcard .nm{font-size:18px; font-weight:800; position:relative; z-index:1; text-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .lcard .cd{font-size:12px; opacity:.9; position:relative; z-index:1; font-variant-numeric:tabular-nums}
+  .addcard{border:2px dashed var(--line); background:transparent; color:var(--mut);
+    display:grid; place-items:center; min-height:96px; border-radius:16px; font-size:14px; font-weight:600}
+
+  /* ---- Bottom nav ---- */
+  nav{position:fixed; left:0; right:0; bottom:0; z-index:30;
+    background:rgba(15,15,22,.92); backdrop-filter:blur(14px); border-top:1px solid var(--line);
+    display:flex; padding:8px 0 calc(8px + env(safe-area-inset-bottom))}
+  nav button{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--mut2); font-size:11px; font-weight:600}
+  nav button.on{color:var(--acc)}
+  nav svg{width:24px; height:24px}
+
+  /* ---- Modal ---- */
+  .overlay{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.6); display:none;
+    align-items:flex-end; justify-content:center; padding:0}
+  .overlay.on{display:flex}
+  .sheet{width:100%; max-width:640px; background:var(--bg2); border-radius:24px 24px 0 0;
+    padding:22px 20px calc(24px + env(safe-area-inset-bottom)); max-height:92vh; overflow:auto;
+    animation:up .22s ease}
+  @keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheet h2{margin:0 0 16px; font-size:19px; font-weight:800}
+  .lbl{font-size:12px; color:var(--mut); font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin:14px 0 6px}
+  .lbl:first-of-type{margin-top:0}
+  .row2{display:flex; gap:10px}
+  .toggle{display:flex; align-items:center; justify-content:space-between; padding:12px 14px;
+    background:var(--card); border-radius:12px; border:1px solid var(--line); margin-top:14px}
+  .sw{width:46px; height:28px; border-radius:20px; background:var(--line); position:relative; transition:.15s; flex:none}
+  .sw.on{background:var(--acc)}
+  .sw::after{content:""; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%;
+    background:#fff; transition:.15s}
+  .sw.on::after{left:21px}
+  /* foglietto: la textarea ha l'aria del post-it, non del form */
+  #noteSheet textarea{width:100%; min-height:210px; padding:16px; border:none; outline:none;
+    border-radius:5px 5px 16px 5px; background:linear-gradient(180deg,#fdf5c9,#f6e59a); color:#3b3320;
+    font-family:"Bradley Hand","Marker Felt",ui-rounded,-apple-system,cursive;
+    font-size:20px; font-weight:600; line-height:1.65; resize:vertical;
+    box-shadow:0 10px 24px rgba(0,0,0,.4)}
+  #noteSheet textarea::placeholder{color:rgba(59,51,32,.34)}
+  .hint{font-size:12px; color:var(--mut2); line-height:1.55; margin-top:10px}
+  .hint b{color:var(--mut); font-weight:700}
+  .colors{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px}
+  .sw-col{width:38px; height:38px; border-radius:50%; border:3px solid transparent}
+  .sw-col.on{border-color:#fff}
+
+  /* esito della verifica del codice a barre nel form carta */
+  .bcchk{font-size:12px; line-height:1.45; margin-top:8px; padding:0}
+  .bcchk:not(:empty){padding:9px 11px; border-radius:10px; border:1px solid var(--line)}
+  .bcchk.ok{color:var(--ok); background:rgba(74,222,128,.10); border-color:rgba(74,222,128,.32)}
+  .bcchk.warn{color:var(--warn); background:rgba(245,181,68,.10); border-color:rgba(245,181,68,.38)}
+  .bcchk.bad{color:var(--danger); background:rgba(248,113,113,.10); border-color:rgba(248,113,113,.38)}
+  .bcchk b{font-variant-numeric:tabular-nums; letter-spacing:.5px}
+
+  /* ---- Barcode fullscreen ---- */
+  .bcwrap{width:100%; max-width:640px; background:var(--bg2); border-radius:24px 24px 0 0; overflow:hidden; animation:up .22s ease}
+  .bchead{padding:34px 20px 46px; text-align:center; position:relative}
+  .bchead .x{position:absolute; top:16px; right:18px; font-size:26px; color:#fff; opacity:.9}
+  .bchead .nm{font-size:26px; font-weight:800; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .bcpanel{background:#fff; margin:0 16px 20px; border-radius:16px; padding:26px 16px 20px; text-align:center; transform:translateY(-24px)}
+  .bcpanel svg{max-width:100%; height:auto}
+  .bcpanel .num{color:#111; font-size:30px; font-weight:700; letter-spacing:4px; margin-top:8px; font-variant-numeric:tabular-nums}
+  .bcpanel .note{color:#b00; font-size:12px; margin-top:8px}
+  .bcactions{display:flex; gap:10px; padding:0 16px calc(20px + env(safe-area-inset-bottom))}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="box">
+    <h1>🛒 Lista della Spesa</h1>
+    <p>Inserisci la password per accedere</p>
+    <input id="pw" class="field" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn" id="loginBtn">Entra</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="top">
+    <div class="titlerow">
+      <h1 id="tabTitle">Spesa</h1>
+      <span class="sync" id="sync">•</span>
+    </div>
+    <!-- add bar (solo tab spesa/catalogo) -->
+    <div class="addbar" id="addbar">
+      <div class="wrap">
+        <input id="addInput" placeholder="Mi serve…" list="dl-prod" autocomplete="off">
+        <datalist id="dl-prod"></datalist>
+      </div>
+      <button class="note" id="noteBtn" title="Scrivi un foglietto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9z"/><path d="M14 3v7h7"/><path d="M7 13h9M7 17h6"/></svg>
+      </button>
+      <button class="add" id="addBtn">+</button>
+    </div>
+  </header>
+
+  <div id="tab-spesa"></div>
+  <div id="tab-catalogo" style="display:none"></div>
+  <div id="tab-carte" style="display:none"></div>
+</div>
+
+<datalist id="dl-dept"></datalist>
+
+<!-- NAV -->
+<nav id="nav" style="display:none">
+  <button data-tab="spesa" class="on">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+    Spesa
+  </button>
+  <button data-tab="catalogo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    Catalogo
+  </button>
+  <button data-tab="carte">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+    Carte
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<!-- MODALS -->
+<div class="overlay" id="ov-note"><div class="sheet" id="noteSheet"></div></div>
+<div class="overlay" id="ov-prod"><div class="sheet" id="prodSheet"></div></div>
+<div class="overlay" id="ov-card"><div class="sheet" id="cardSheet"></div></div>
+<div class="overlay" id="ov-bc" style="align-items:flex-end"><div class="bcwrap" id="bcSheet"></div></div>
+
+<script>
+"use strict";
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const uid = ()=> (crypto.randomUUID ? crypto.randomUUID() : 'id'+Date.now()+Math.random().toString(16).slice(2));
+const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const now = ()=> Date.now();
+
+let state = { version:0, products:[], cards:[], deleted:{} };
+let token = localStorage.getItem('spesa_token');
+let dirty = localStorage.getItem('spesa_dirty')==='1';
+let sortMode = localStorage.getItem('spesa_sort') || 'reparto';
+let tab = 'spesa';
+let syncTimer=null;
+
+const BC_FORMATS = ['AUTO','CODE128','EAN13','EAN8','UPC','CODE39','ITF14'];
+const BC_LEN = { EAN13:13, EAN8:8, UPC:12, ITF14:14 }; // lunghezza totale, cifra di controllo inclusa
+const CARD_COLORS = ['#e6b84f','#e05a5a','#4d9de0','#3fb27f','#8b5cf6','#ec6ec8','#f08a3c','#5a6270'];
+// Reparti standard sempre disponibili nell'elenco; se ne scrivi altri, vengono ricordati dai prodotti.
+const STD_DEPARTMENTS = ['Frutta e verdura','Carne','Pesce','Salumi e formaggi','Pane e forno','Latticini e uova','Gastronomia','Surgelati','Pasta, riso e cereali','Scatolame e conserve','Colazione e dolci','Snack e merende','Bevande','Acqua','Vino e alcolici','Condimenti e spezie','Prima colazione','Cura della casa','Igiene e cura persona','Prodotti per animali','Bimbi','Altro'];
+
+/* ---------- il foglietto ----------
+   Chi scrive di corsa non ha voglia di compilare reparto/quantità: qui il reparto
+   lo indovina un dizionario e la quantità la estrae una regex, così le voci scritte
+   a mano libera finiscono comunque nella lista ordinata per corsia. */
+const norm = s => (s||'').toString().toLowerCase().normalize('NFD')
+  .replace(/[̀-ͯ]/g,'').replace(/['’`]/g,' ').replace(/\s+/g,' ').trim();
+
+// Parola (o gruppo di parole) → reparto. Vince sempre la chiave più lunga che compare
+// nel nome, così "pomodori pelati" va in Scatolame e non in Frutta e verdura.
+const DEPT_WORDS = {
+  'Frutta e verdura':'frutta|verdura|mela|mele|pera|pere|banana|banane|arancia|arance|mandarini|clementine|limone|limoni|pompelmo|uva|fragole|fragola|pesca|pesche|albicocche|ciliegie|melone|anguria|ananas|kiwi|mirtilli|lamponi|more|avocado|insalata|lattuga|rucola|spinaci|pomodoro|pomodori|pomodorini|zucchina|zucchine|zucca|melanzana|melanzane|peperone|peperoni|carota|carote|cipolla|cipolle|cipollotti|aglio|patata|patate|sedano|finocchio|finocchi|broccoli|cavolfiore|cavolo|verza|funghi|champignon|cetriolo|cetrioli|ravanelli|asparagi|fagiolini|radicchio|songino|basilico|prezzemolo|rosmarino|salvia|menta|zenzero',
+  'Carne':'carne|pollo|tacchino|fesa|petto di pollo|manzo|vitello|maiale|agnello|salsiccia|salsicce|hamburger|macinato|bistecca|bistecche|costine|spiedini|wurstel|scaloppine|cotolette|braciole|polpette|lombo',
+  'Pesce':'pesce|pesci|salmone|tonno fresco|merluzzo|orata|branzino|spigola|gamberi|gamberetti|calamari|polpo|cozze|vongole|platessa|sogliola|alici|sgombro',
+  'Salumi e formaggi':'formaggio|formaggi|prosciutto|prosciutto cotto|prosciutto crudo|salame|mortadella|bresaola|speck|pancetta|guanciale|coppa|parmigiano|grana|pecorino|gorgonzola|provola|provolone|scamorza|asiago|emmental|groviera|brie|taleggio|stracchino|galbanino|sottilette',
+  'Pane e forno':'pane|pancarre|pane in cassetta|panini|rosette|michette|baguette|piadina|piadine|focaccia|grissini|cracker|crackers|taralli|schiacciata',
+  'Latticini e uova':'latte|panna|burro|yogurt|yogurth|uova|uovo|mozzarella|mozzarelle|ricotta|mascarpone|philadelphia|stracciatella|besciamella',
+  'Surgelati':'surgelati|surgelato|gelato|gelati|ghiaccio|bastoncini|sofficini|minestrone|piselli surgelati',
+  'Pasta, riso e cereali':'pasta|spaghetti|penne|fusilli|rigatoni|farfalle|tortiglioni|linguine|bucatini|lasagne|gnocchi|tortellini|ravioli|riso|risotto|orzo|farro|quinoa|couscous|polenta|semola|pangrattato',
+  'Scatolame e conserve':'pelati|pomodori pelati|passata|polpa di pomodoro|concentrato|sugo|ragu|pesto|tonno|tonno in scatola|ceci|fagioli|lenticchie|cannellini|borlotti|piselli|mais|olive|capperi|acciughe|brodo|dado|mais in scatola',
+  'Colazione e dolci':'biscotti|fette biscottate|cereali|cornflakes|muesli|marmellata|confettura|miele|nutella|cacao|caffe|the|te|tisane|zucchero|farina|lievito|cioccolato|cioccolata|merendine|brioche|croissant|plumcake|pandoro|panettone|budino|panna montata',
+  'Snack e merende':'patatine|snack|noccioline|arachidi|mandorle|noci|pistacchi|popcorn|caramelle|chewing gum|barrette|taralli piccanti',
+  'Bevande':'coca cola|coca|pepsi|fanta|sprite|aranciata|chinotto|succo|succhi|spremuta|bibite|energy drink|gatorade|powerade|tonica|gassosa|estathe',
+  'Acqua':'acqua|acqua frizzante|acqua naturale|acqua minerale|minerale',
+  'Vino e alcolici':'vino|birra|birre|prosecco|spumante|champagne|vodka|gin|rum|whisky|whiskey|liquore|amaro|limoncello|aperol|campari|vermouth',
+  'Condimenti e spezie':'olio|olio di semi|olio extravergine|aceto|sale|pepe|origano|peperoncino|curry|paprika|cannella|curcuma|cumino|alloro|spezie|maionese|ketchup|senape|mostarda',
+  'Cura della casa':'detersivo|detersivi|detersivo piatti|detersivo lavatrice|ammorbidente|candeggina|sgrassatore|anticalcare|spugne|spugnette|guanti|sacchi|sacchetti|pattumiera|scottex|carta assorbente|carta igienica|tovaglioli|lampadine|pile|mocio|panni|lavastoviglie|brillantante|smacchiatore|piatti di carta',
+  'Igiene e cura persona':'shampoo|balsamo|bagnoschiuma|docciaschiuma|dentifricio|spazzolino|filo interdentale|collutorio|deodorante|rasoio|rasoi|schiuma da barba|assorbenti|salviette|cotton fioc|crema|profumo|sapone|cerotti|fazzoletti',
+  'Prodotti per animali':'croccantini|lettiera|cibo per gatto|cibo per cane|whiskas|felix|pedigree|crocchette gatto',
+  'Bimbi':'pannolini|pannolino|omogeneizzati|pappa|biberon|salviettine|plasmon|mellin',
+};
+const DEPT_HINTS = Object.entries(DEPT_WORDS)
+  .flatMap(([d,ws]) => ws.split('|').map(w => ({w:' '+norm(w)+' ', d})))
+  .sort((a,b) => b.w.length - a.w.length);
+function guessDept(name){
+  const n = ' '+norm(name)+' ';
+  const hit = DEPT_HINTS.find(h => n.includes(h.w));
+  return hit ? hit.d : '';
+}
+
+// Unità riconosciute nella quantità. L'ordine conta: le sigle lunghe prima delle corte.
+const QTY_UNIT = '(?:kg|kilo|kili|chilo|chili|hg|etti|etto|gr|g|litri|litro|lt|l|ml|cl'
+  + '|pz|pezzi|pezzo|confezioni|confezione|conf|bottiglie|bottiglia|bott|scatole|scatola'
+  + '|barattoli|barattolo|vasetti|vasetto|buste|busta|sacchetti|sacchetto|mazzi|mazzo'
+  + '|cassette|cassetta|rotoli|rotolo|fette|fetta|pacchi|pacco|pacchetti|pacchetto'
+  + '|cestini|cestino|vaschette|vaschetta)';
+// "2 latte", "x2 latte", "2x latte", "1kg pomodori", "500 g pasta".
+// Il confine dopo l'unità è obbligatorio, altrimenti la "l" di litri si mangia
+// la prima lettera del nome: "2 latte" diventerebbe 2 l di "atte".
+const RE_QHEAD = new RegExp('^(?:x\\s*)?(\\d+(?:[.,]\\d+)?)\\s*('+QTY_UNIT+'(?![^\\W\\d_]))?(?:\\s*x(?!\\w))?[\\s.·:–—-]*(?=\\S)','i');
+// "latte x2", "pasta 500g", "acqua 6"
+const RE_QTAIL = new RegExp('[\\s,·:–—-]*(?:x\\s*)?(\\d+(?:[.,]\\d+)?)\\s*('+QTY_UNIT+')?$','i');
+
+// Una riga scritta a mano → {name, quantity, details}. null se non c'è niente di utile.
+function parseLine(raw){
+  let s = (raw||'').replace(/^[\s•*·+\-–—>]+/,'').replace(/\s+/g,' ').trim();
+  if(!s) return null;
+  let details='', quantity='';
+  const addDet = d => { d=d.trim(); if(d) details = details ? details+' · '+d : d; };
+  s = s.replace(/\(([^)]*)\)/g, (m,g)=>{ addDet(g); return ' '; }).replace(/\s+/g,' ').trim();
+  const dash = s.match(/\s(?:[-–—]|:)\s*(.+)$/);          // "pane — integrale"
+  if(dash){ addDet(dash[1]); s = s.slice(0,dash.index).trim(); }
+  const grab = re => {
+    const m = s.match(re); if(!m) return false;
+    const rest = (s.slice(0,m.index) + s.slice(m.index + m[0].length)).trim();
+    if(!rest) return false;                                // la riga era solo un numero
+    quantity = [m[1].replace(',','.'), m[2]||''].filter(Boolean).join(' ');
+    s = rest; return true;
+  };
+  grab(RE_QHEAD) || grab(RE_QTAIL);
+  const name = s.replace(/^[\s.,;:·–—-]+|[\s.,;:·–—-]+$/g,'').slice(0,60).trim();
+  if(!name || /^\d+$/.test(name)) return null;
+  return {name, quantity, details: details.slice(0,120)};
+}
+
+// Il testo del foglietto → elenco di voci. La virgola separa due cose ("pane, latte"),
+// ma se la riga contiene un trattino o una parentesi è un dettaglio e non si spezza.
+function parseNote(text){
+  const out=[];
+  (text||'').split(/\r?\n/).forEach(line=>{
+    const parts = /[-–—:(]/.test(line) ? [line] : line.split(/[,;]+/);
+    parts.forEach(pt=>{ const p=parseLine(pt); if(p) out.push(p); });
+  });
+  return out;
+}
+
+/* Le voci nate dal foglietto sono usa-e-getta (`temp`): stanno nella lista come le altre
+   ma non entrano nel catalogo e a "Termina spesa" spariscono. Se un nome c'è già in
+   catalogo si riusa quello — il catalogo non si duplica e non si sporca. */
+function applyItems(items){
+  let nuovi=0, gia=0;
+  if(!items.length) return {nuovi, gia};
+  mutate(()=>{
+    items.forEach(it=>{
+      const key = norm(it.name);
+      const p = state.products.find(x => norm(x.name) === key);   // vede anche le voci di questo stesso foglietto
+      if(!p){
+        state.products.push({id:uid(), name:it.name, department:guessDept(it.name),
+          quantity:it.quantity, details:it.details, inList:true, checked:false, favorite:false,
+          temp:true, useCount:1, lastUsed:now()});
+        nuovi++; return;
+      }
+      if(p.inList && !p.checked) gia++; else nuovi++;
+      p.inList=true; p.checked=false;
+      p.useCount=(p.useCount||0)+1; p.lastUsed=now();
+      if(it.quantity) p.quantity=it.quantity;
+      if(it.details && !norm(p.details).includes(norm(it.details)))
+        p.details = [p.details, it.details].filter(Boolean).join(' · ');
+      if(!p.department) p.department = guessDept(p.name);
+    });
+  });
+  return {nuovi, gia};
+}
+
+/* ---------- storage / sync ---------- */
+function persist(){
+  localStorage.setItem('spesa_state', JSON.stringify(state));
+  localStorage.setItem('spesa_dirty', dirty?'1':'0');
+}
+function loadLocal(){
+  try{ const s=localStorage.getItem('spesa_state'); if(s) state=JSON.parse(s); }catch{}
+  if(!state.deleted) state.deleted={};
+}
+function setSync(kind){
+  const el=$('#sync'); if(!el) return;
+  el.className='sync '+({ok:'ok',off:'off',sav:'sav'}[kind]||'');
+  el.textContent = kind==='ok'?'✓ salvato':kind==='sav'?'…salvo':kind==='off'?'⚠ offline':'•';
+}
+async function api(method,path,body){
+  const r = await fetch(path,{
+    method,
+    headers:{'content-type':'application/json','authorization':'Bearer '+token},
+    body: body?JSON.stringify(body):undefined
+  });
+  if(r.status===401){ logout(); throw new Error('401'); }
+  return r;
+}
+/* Sincronizzazione. Lo stato è un blob unico ma ogni prodotto/carta porta `u`
+   (quando è stato toccato l'ultima volta) e le cancellazioni lasciano una lapide in
+   `deleted`: così, se due telefoni hanno modificato cose diverse, si fondono invece di
+   buttare via tutto quello che uno dei due aveva fatto. */
+const TOMB_TTL = 30*24*3600*1000;
+function snap(){ const m=new Map(); [...state.products,...state.cards].forEach(x=>m.set(x.id,JSON.stringify(x))); return m; }
+function stamp(before){
+  const t=now(); state.deleted=state.deleted||{}; const seen=new Set();
+  for(const x of [...state.products,...state.cards]){
+    seen.add(x.id);
+    if(before.get(x.id)!==JSON.stringify(x)) x.u=t;
+    delete state.deleted[x.id];
+  }
+  for(const id of before.keys()) if(!seen.has(id)) state.deleted[id]=t;
+}
+function mergeStates(a,b){          // a = locale, b = server
+  const del={...(b.deleted||{})};
+  for(const k in (a.deleted||{})) del[k]=Math.max(del[k]||0,a.deleted[k]);
+  const cut=now()-TOMB_TTL; for(const k in del) if(del[k]<cut) delete del[k];
+  const pick=(la,lb)=>{
+    const m=new Map((lb||[]).map(x=>[x.id,x]));
+    (la||[]).forEach(x=>{ const y=m.get(x.id); if(!y || (x.u||0)>=(y.u||0)) m.set(x.id,x); });
+    return [...m.values()].filter(x=>!(del[x.id]>(x.u||0)));
+  };
+  return {version:Math.max(a.version||0,b.version||0), products:pick(a.products,b.products), cards:pick(a.cards,b.cards), deleted:del};
+}
+let pendingRender=false;
+// Non ridisegno mentre scrivi o hai una scheda aperta: ti toglierei il testo da sotto le dita.
+function busyUI(){
+  const a=document.activeElement;
+  return !!$('.overlay.on') || (a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA') && a.value);
+}
+async function pull(){
+  try{
+    const r=await api('GET','/api/state'); const server=await r.json();
+    const sv=server.version||0;
+    let changed=false;
+    if(dirty){
+      if(state.version>=sv){ await push(); }
+      else { state=mergeStates(state,server); state.version=Math.max(now(),state.version+1); persist(); changed=true; await push(); }
+    }else if(sv>=state.version && JSON.stringify(server)!==JSON.stringify(state)){
+      state=server; if(!state.deleted) state.deleted={}; persist(); changed=true;
+    }
+    if(!dirty) setSync('ok');
+    if(changed||!pulledOnce){ busyUI() ? (pendingRender=true) : render(); }
+    pulledOnce=true;
+  }catch(e){ setSync('off'); }
+}
+let pulledOnce=false;
+async function push(retry=1){
+  if(!dirty) return;
+  setSync('sav');
+  try{
+    const r=await api('PUT','/api/state',state);
+    if(r.status===409){
+      // Il server ha una versione più nuova: fondo le due invece di scartare la mia.
+      const d=await r.json();
+      state=mergeStates(state,d.state); state.version=Math.max(now(),state.version+1); persist(); render();
+      if(retry>0) return push(retry-1);
+      return;
+    }
+    if(!r.ok) throw new Error('put');
+    dirty=false; persist(); setSync('ok');
+  }catch(e){ setSync('off'); }
+}
+function mutate(fn){
+  const before=snap();
+  fn();
+  stamp(before);
+  state.version=now(); dirty=true; persist(); render();
+  clearTimeout(syncTimer); syncTimer=setTimeout(push,700);
+}
+// L'altra persona sta facendo la spesa in parallelo: riallineo quando torno sull'app
+// e ogni 20 secondi finché è aperta, senza dover chiudere e riaprire.
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && token) pull(); });
+setInterval(()=>{ if(document.visibilityState==='visible' && token && !dirty) pull(); }, 20000);
+window.addEventListener('online', ()=>{ if(dirty) push(); });
+
+/* ---------- product ops ---------- */
+function findByName(name){
+  const n=norm(name);   // accenti e maiuscole non contano: "caffè" e "Caffe" sono lo stesso prodotto
+  return state.products.find(p=>norm(p.name)===n);
+}
+function P(id){ return state.products.find(p=>p.id===id); }
+function toggleChecked(id){ mutate(()=>{ const p=P(id); if(p) p.checked=!p.checked; }); }
+function toggleInList(id){ mutate(()=>{ const p=P(id); if(p){ p.inList=!p.inList; if(p.inList){p.checked=false;p.useCount=(p.useCount||0)+1;p.lastUsed=now();} } }); }
+function toggleFav(id){ mutate(()=>{ const p=P(id); if(p) p.favorite=!p.favorite; }); }
+function finishTrip(){
+  const backup=JSON.stringify(state.products), n=state.products.filter(p=>p.checked).length;
+  mutate(()=>{
+    state.products=state.products.filter(p=>!(p.checked&&p.temp));   // le voci volanti non restano in catalogo
+    state.products.forEach(p=>{ if(p.checked){p.inList=false;p.checked=false;} });
+  });
+  // Un tocco di troppo non deve costare la lista: "Annulla" rimette tutto com'era.
+  toast(`Spesa terminata · ${n} prese`, ()=>mutate(()=>{ state.products=JSON.parse(backup); }), 7000);
+}
+function saveProduct(id,patch){ mutate(()=>{ const p=P(id); if(p) Object.assign(p,patch); }); }
+function deleteProduct(id){ mutate(()=>{ state.products=state.products.filter(p=>p.id!==id); }); }
+
+/* ---------- rendering ---------- */
+function departments(){ return [...new Set([...STD_DEPARTMENTS, ...state.products.map(p=>p.department).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'it')); }
+// I reparti "creati" non sono una lista a parte: esistono solo come stringa sui prodotti.
+const isCustomDept = d => !STD_DEPARTMENTS.includes(d);
+const deptUsage = d => state.products.filter(p=>p.department===d).length;
+// Cancellare un reparto = svuotarlo dai prodotti che lo usano (i prodotti restano)
+function deleteDepartment(d){ mutate(()=>{ state.products.forEach(p=>{ if(p.department===d) p.department=''; }); }); }
+function deptChipsHTML(sel){
+  const list=[...new Set([...departments(), ...(sel?[sel]:[])])].sort((a,b)=>a.localeCompare(b,'it'));
+  return list.map(d=>`<button type="button" class="chip ${d===sel?'on':''}" data-dept="${esc(d)}">${esc(d)}`
+    +(isCustomDept(d)?`<span class="x" data-deldept="${esc(d)}" title="Elimina reparto">✕</span>`:'')
+    +`</button>`).join('');
+}
+function refreshDatalists(){
+  $('#dl-prod').innerHTML = state.products.filter(p=>!p.temp).map(p=>`<option value="${esc(p.name)}">`).join('');
+  $('#dl-dept').innerHTML = departments().map(d=>`<option value="${esc(d)}">`).join('');
+}
+
+function rowHTML(p,{cart=false}={}){
+  const sub=[p.quantity?'× '+esc(p.quantity):'', esc(p.details)].filter(Boolean).join(' · ');
+  return `<div class="row ${cart?'done':''}" data-id="${p.id}">
+    <button class="ck ${cart?'on':''}" data-act="check" aria-label="${cart?'Rimetti in lista':'Segna come preso'}: ${esc(p.name)}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </button>
+    <div class="body" data-act="check">
+      <div class="nm">${esc(p.name)}</div>
+      ${sub?`<div class="sub">${sub}</div>`:''}
+    </div>
+    ${p.quantity&&!cart?`<span class="qty">${esc(p.quantity)}</span>`:''}
+    <button class="edit" data-act="edit" aria-label="Modifica ${esc(p.name)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+  </div>`;
+}
+
+/* ---------- vista foglietto ----------
+   Le righe restano nell'ordine in cui sono state scritte (un post-it non è in ordine
+   alfabetico) e l'ultima riga è un input sempre pronto: Invio aggiunge e resta lì. */
+function plineHTML(p){
+  return `<div class="pline ${p.checked?'done':''}" data-id="${p.id}" data-act="check">
+    <span class="txt">${esc(p.name)}${p.details?` <span class="dt">(${esc(p.details)})</span>`:''}</span>
+    ${p.quantity?`<span class="q">×${esc(p.quantity)}</span>`:''}
+    <button class="pe" data-act="edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+  </div>`;
+}
+function postitHTML(active,cart){
+  return `<div class="paper">
+      <div class="ph"><span>${active.length?'Da prendere · '+active.length:'Foglietto'}</span>
+      ${cart.length?`<button class="finish" id="finishBtn">Termina spesa · ${cart.length}</button>`:''}</div>
+      ${[...active,...cart].map(plineHTML).join('')}
+      <div class="pnew"><span class="plus">+</span><input id="pNew" autocomplete="off"
+        enterkeyhint="enter" placeholder="${active.length||cart.length?'altro…':'scrivi la lista…'}"></div>
+    </div>
+    <div class="phint">Tap sulla riga = presa · Invio va a capo · matita per reparto e note</div>`;
+}
+let pnewFocus=false;
+function wirePostit(){
+  const i=$('#pNew'); if(!i) return;
+  i.onkeydown=e=>{
+    if(e.key!=='Enter') return;
+    const items=parseNote(i.value); i.value='';
+    if(!items.length) return;
+    pnewFocus=true;            // applyItems ridisegna tutto: l'input va rifocalizzato
+    applyItems(items);
+  };
+  if(pnewFocus){ pnewFocus=false; i.focus(); }
+}
+
+function renderSpesa(){
+  const c=$('#tab-spesa');
+  const active=state.products.filter(p=>p.inList&&!p.checked);
+  const cart=state.products.filter(p=>p.inList&&p.checked);
+
+  // suggerimenti: preferiti + frequenti non in lista (le voci volanti non sono suggerimenti)
+  const sugg=state.products.filter(p=>!p.inList&&!p.temp)
+    .sort((a,b)=> (b.favorite-a.favorite) || ((b.useCount||0)-(a.useCount||0)) || ((b.lastUsed||0)-(a.lastUsed||0)))
+    .slice(0,12);
+
+  let html='';
+
+  // segmented sort
+  html+=`<div class="seg">
+    <button data-sort="reparto" class="${sortMode==='reparto'?'on':''}">Reparti</button>
+    <button data-sort="alfa" class="${sortMode==='alfa'?'on':''}">A-Z</button>
+    <button data-sort="postit" class="${sortMode==='postit'?'on':''}">Foglietto</button>
+  </div>`;
+
+  if(sortMode==='postit'){ c.innerHTML=html+postitHTML(active,cart); wirePostit(); return; }
+
+  if(sugg.length){
+    html+=`<div class="chips-label">Aggiungi al volo</div><div class="chips">`;
+    html+=sugg.map(p=>`<button class="chip" data-add="${p.id}">${p.favorite?'<span class="st">★</span>':''}${esc(p.name)}</button>`).join('');
+    html+=`</div>`;
+  }
+
+  html+=`<div class="list">`;
+  if(!active.length && !cart.length){
+    html+=`<div class="empty"><div class="big">🧺</div>La lista è vuota.<br>Scrivi qui sopra cosa ti serve.
+      <div style="margin-top:16px;max-width:260px;margin-inline:auto">
+        <button class="btn" id="noteBtn2">📝 Scrivi un foglietto</button>
+        <button class="btn ghost" id="newProdBtn">+ Nuovo prodotto</button>
+      </div></div>`;
+  }
+  if(active.length){
+    if(sortMode==='alfa'){
+      const s=[...active].sort((a,b)=>a.name.localeCompare(b.name,'it'));
+      html+=s.map(p=>rowHTML(p)).join('');
+    }else{
+      const groups={};
+      active.forEach(p=>{ const k=p.department||'Altro'; (groups[k]=groups[k]||[]).push(p); });
+      const keys=Object.keys(groups).sort((a,b)=> a==='Altro'?1 : b==='Altro'?-1 : a.localeCompare(b,'it'));
+      keys.forEach(k=>{
+        const items=groups[k].sort((a,b)=>a.name.localeCompare(b.name,'it'));
+        html+=`<details class="grp" open><summary><span class="caret">▾</span> ${esc(k)} · ${items.length}</summary>${items.map(p=>rowHTML(p)).join('')}</details>`;
+      });
+    }
+  }
+  if(cart.length){
+    html+=`<div class="cart-h"><span>Nel carrello · ${cart.length}</span><button class="finish" id="finishBtn">Termina spesa</button></div>`;
+    html+=cart.sort((a,b)=>a.name.localeCompare(b.name,'it')).map(p=>rowHTML(p,{cart:true})).join('');
+  }
+  html+=`</div>`;
+  c.innerHTML=html;
+}
+
+function renderCatalogo(){
+  const c=$('#tab-catalogo');
+  const q=norm(c._q||'');
+  // le voci scritte al volo nel foglietto stanno solo nella lista: il catalogo resta curato
+  const saved=state.products.filter(p=>!p.temp);
+  const volanti=state.products.length-saved.length;
+  let prods=[...saved];
+  if(q) prods=prods.filter(p=>norm(p.name).includes(q)||norm(p.department).includes(q));
+  prods.sort((a,b)=>a.name.localeCompare(b.name,'it'));
+  let html=`<div style="padding:10px 18px 0"><input id="catSearch" class="field" placeholder="Cerca nel catalogo…" value="${esc(c._q||'')}"></div>`;
+  html+=`<div class="chips-label">${saved.length} prodotti salvati${volanti?` · ${volanti} volant${volanti===1?'e':'i'} nella lista`:''}</div><div class="list">`;
+  if(!prods.length) html+=`<div class="empty"><div class="big">📇</div>${q?'Nessun prodotto trovato.':'Nessun prodotto.<br>Quello che aggiungi resta salvato qui.'}
+    <div style="margin-top:16px"><button class="btn" id="newProdBtn" style="max-width:260px;margin:0 auto">+ Nuovo prodotto</button></div></div>`;
+  html+=prods.map(p=>{
+    const sub=[p.department?esc(p.department):'', esc(p.details)].filter(Boolean).join(' · ');
+    return `<div class="row" data-id="${p.id}">
+      <button class="star" data-act="fav">${p.favorite?'★':'☆'}</button>
+      <div class="body" data-act="edit"><div class="nm">${esc(p.name)}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>
+      <button class="cat-toggle ${p.inList?'in':'out'}" data-act="toggle">${p.inList?'In lista':'+ Lista'}</button>
+    </div>`;
+  }).join('');
+  html+=`</div>`;
+  c.innerHTML=html;
+  const s=$('#catSearch'); if(s){ s.oninput=e=>{ c._q=e.target.value; renderCatalogo(); const el=$('#catSearch'); el.focus(); el.setSelectionRange(el.value.length,el.value.length); }; }
+}
+
+function renderCarte(){
+  const c=$('#tab-carte');
+  let html=`<div class="cardgrid">`;
+  html+=state.cards.map(cd=>{
+    const n=normalizeBarcode(cd.code,cd.format);
+    return `<button class="lcard" style="background:${esc(cd.color||'#8b5cf6')}" data-card="${cd.id}">
+      <div class="nm">${esc(cd.name)}</div><div class="cd">${esc(n.error?cd.code:n.value)}</div></button>`;
+  }).join('');
+  html+=`<button class="addcard" id="addCardBtn">+ Aggiungi carta</button></div>`;
+  if(!state.cards.length) html=`<div class="empty"><div class="big">💳</div>Nessuna carta fedeltà.<br>Aggiungile qui e mostrale alla cassa.</div>`+html;
+  c.innerHTML=html;
+}
+
+function render(){
+  refreshDatalists();
+  $('#addbar').style.display = tab==='carte' ? 'none' : 'flex';
+  const inL=state.products.filter(p=>p.inList), got=inL.filter(p=>p.checked).length;
+  $('#tabTitle').innerHTML = tab==='spesa' ? 'Spesa'+(inL.length?`<small>${got}/${inL.length}</small>`:'') : tab==='catalogo'?'Catalogo':'Carte';
+  $('#addInput').placeholder = tab==='catalogo'?'Nome prodotto…':'Mi serve…';
+  $$('#tab-spesa,#tab-catalogo,#tab-carte').forEach(el=>el.style.display='none');
+  if(tab==='spesa'){ $('#tab-spesa').style.display='block'; renderSpesa(); }
+  if(tab==='catalogo'){ $('#tab-catalogo').style.display='block'; renderCatalogo(); }
+  if(tab==='carte'){ $('#tab-carte').style.display='block'; renderCarte(); }
+}
+
+/* ---------- modals ---------- */
+// id vuoto/assente => nuovo prodotto. `preset` precompila i campi (es. il nome
+// già scritto nella barra in alto) senza che l'utente lo debba riscrivere.
+function openProd(id, preset){
+  const isNew=!id;
+  const p = isNew
+    ? {name:'',department:'',details:'',quantity:'',inList:tab!=='catalogo',checked:false,favorite:false, ...(preset||{})}
+    : P(id);
+  if(!p) return;
+  $('#prodSheet').innerHTML=`
+    <h2>${isNew?'Nuovo prodotto':'Modifica prodotto'}</h2>
+    <div class="lbl">Nome</div><input id="e-name" class="field" value="${esc(p.name)}" placeholder="es. Latte" list="dl-prod" autocomplete="off">
+    <div class="lbl">Reparto</div>
+    <div class="deptchips" id="e-deptchips">${deptChipsHTML(p.department)}</div>
+    <div class="newdept"><input id="e-newdept" class="field" placeholder="Nuovo reparto…"><button id="e-adddept" type="button">+</button></div>
+    <div class="lbl">Quantità</div><input id="e-qty" class="field" value="${esc(p.quantity)}" placeholder="es. 2">
+    <div class="lbl">Dettagli / note</div><input id="e-det" class="field" value="${esc(p.details)}" placeholder="marca, formato…">
+    <div class="toggle"><span>In lista della spesa</span><button class="sw ${p.inList?'on':''}" id="e-inlist"></button></div>
+    <div class="toggle"><span>Preferito ★</span><button class="sw ${p.favorite?'on':''}" id="e-fav"></button></div>
+    ${!isNew&&p.temp?`<div class="toggle"><span>Tieni in catalogo<br><small style="color:var(--mut2);font-weight:400">ora è una voce volante: sparisce a fine spesa</small></span>
+      <button class="sw" id="e-keep"></button></div>`:''}
+    <div class="bcchk" id="e-dup"></div>
+    <button class="btn" id="e-save" style="margin-top:18px">${isNew?'Aggiungi':'Salva'}</button>
+    ${isNew?'':`<button class="btn danger" id="e-del" style="margin-top:10px">${p.temp?'Togli dalla lista':'Elimina dal catalogo'}</button>`}`;
+  let inList=p.inList, fav=p.favorite, dept=p.department||'', keep=!p.temp;
+  const chipsBox=$('#e-deptchips');
+  chipsBox.onclick=e=>{
+    const x=e.target.closest('[data-deldept]');
+    if(x){                                   // ✕ sul chip: elimina il reparto personalizzato
+      const d=x.dataset.deldept, n=deptUsage(d);
+      const msg=n ? `Eliminare il reparto "${d}"? ${n} prodott${n===1?'o':'i'} rimarrà senza reparto (non viene cancellato).`
+                  : `Eliminare il reparto "${d}"?`;
+      if(!confirm(msg)) return;
+      deleteDepartment(d);
+      if(dept===d) dept='';
+      chipsBox.innerHTML=deptChipsHTML(dept);
+      return;
+    }
+    const b=e.target.closest('[data-dept]'); if(!b) return;
+    dept = (b.dataset.dept===dept) ? '' : b.dataset.dept;  // ritap = deseleziona
+    chipsBox.innerHTML=deptChipsHTML(dept); };
+  $('#e-adddept').onclick=()=>{ const inp=$('#e-newdept'); const v=inp.value.trim(); if(!v) return;
+    dept=v; inp.value=''; chipsBox.innerHTML=deptChipsHTML(dept); };
+  $('#e-inlist').onclick=e=>{ inList=!inList; e.target.classList.toggle('on',inList); };
+  $('#e-fav').onclick=e=>{ fav=!fav; e.target.classList.toggle('on',fav); };
+  if($('#e-keep')) $('#e-keep').onclick=e=>{ keep=!keep; e.target.classList.toggle('on',keep); };
+
+  // Su un prodotto nuovo, avvisa se il nome esiste già: si aggiorna quello, non si duplica
+  const dup=$('#e-dup');
+  if(isNew){
+    const refreshDup=()=>{
+      const ex=findByName($('#e-name').value.trim());
+      if(ex){ dup.className='bcchk warn'; dup.innerHTML=`⚠️ "${esc(ex.name)}" è già in catalogo: verrà aggiornato invece di crearne un doppione.`; }
+      else { dup.className='bcchk'; dup.innerHTML=''; }
+    };
+    $('#e-name').oninput=refreshDup; refreshDup();
+  }
+
+  $('#e-save').onclick=()=>{
+    const name=$('#e-name').value.trim();
+    if(!name){ $('#e-name').focus(); return; }
+    const nd=$('#e-newdept').value.trim(); if(nd) dept=nd;  // reparto scritto ma non confermato col +
+    const patch={name, department:dept, quantity:$('#e-qty').value.trim(),
+      details:$('#e-det').value.trim(), inList, favorite:fav};
+    if(isNew){
+      const ex=findByName(name);   // nome già presente: aggiorno quello esistente
+      // tengo il nome già salvato: "latte" non deve rinominare "Latte"
+      // temp:false — chi apre la scheda e la compila sta curando il prodotto, non è più volante
+      if(ex) saveProduct(ex.id,{...patch, name:ex.name, temp:false, checked: inList?ex.checked:false,
+        useCount:(ex.useCount||0)+(inList?1:0), lastUsed:now()});
+      else mutate(()=>state.products.push({id:uid(), ...patch, checked:false,
+        useCount:inList?1:0, lastUsed:now()}));
+    }else{
+      // voce volante fuori dalla lista e non promossa: non ha più dove stare
+      if(p.temp && !keep && !inList){ deleteProduct(id); close('#ov-prod'); return; }
+      saveProduct(id,{...patch, temp: !!p.temp && !keep, checked: inList?p.checked:false});
+    }
+    close('#ov-prod');
+  };
+  if(!isNew) $('#e-del').onclick=()=>{ deleteProduct(id); close('#ov-prod'); };
+  open('#ov-prod');
+  if(isNew && !p.name) setTimeout(()=>$('#e-name').focus(),80);
+}
+
+/* ---------- foglietto: la sheet di scrittura ---------- */
+let toastT=null;
+let toastUndo=null;
+function toast(msg, undo, ms){
+  const el=$('#toast'); el.textContent=msg; el.classList.add('on');
+  toastUndo=undo||null; el.classList.toggle('act',!!undo);
+  if(undo){ const b=document.createElement('button'); b.textContent='Annulla'; b.dataset.undo='1'; el.appendChild(b); }
+  clearTimeout(toastT); toastT=setTimeout(()=>{ el.classList.remove('on','act'); toastUndo=null; }, ms||3400);
+}
+function openNote(){
+  $('#noteSheet').innerHTML=`
+    <h2>Foglietto</h2>
+    <textarea id="n-txt" placeholder="2 latte
+pane — integrale
+pomodori 1kg
+detersivo piatti"></textarea>
+    <div class="hint">Una cosa per riga, oppure separate da virgola. La quantità dove capita:
+      <b>2 latte</b>, <b>latte x2</b>, <b>1kg pomodori</b>. Dopo un trattino o tra parentesi
+      è un dettaglio: <b>pane — integrale</b>. Il reparto lo indovina l'app.</div>
+    <button class="btn" id="n-save" style="margin-top:16px">Metti in lista</button>`;
+  const ta=$('#n-txt');
+  $('#n-save').onclick=()=>{
+    const items=parseNote(ta.value);
+    close('#ov-note');
+    if(!items.length) return;
+    const r=applyItems(items);
+    toast(r.nuovi
+      ? `${r.nuovi} in lista${r.gia?` · ${r.gia} c'${r.gia===1?'era':'erano'} già`:''}`
+      : `C'${r.gia===1?'era':'erano'} già tutto in lista`);
+  };
+  open('#ov-note');
+  setTimeout(()=>ta.focus(),140);
+}
+
+/* ---------- Codici a barre: normalizzazione e verifica ----------
+   Un UPC-A a 12 cifre È un EAN-13 con uno zero davanti (le barre sono identiche):
+   sulla tessera quello zero non viene stampato. JsBarcode però, se gli passi 12
+   cifre con formato EAN13, non segnala nulla e calcola la cifra di controllo
+   appendendola A DESTRA -> esce un codice diverso (era il caso della carta Conad).
+   Qui il codice viene portato alla lunghezza piena e la cifra di controllo
+   verificata PRIMA di disegnare le barre. */
+function bcCheckDigit(data){   // EAN13 / EAN8 / UPC / ITF14: la cifra dati più a destra pesa 3
+  let s=0; for(let i=0;i<data.length;i++) s += +data[i] * ((data.length-1-i)%2===0 ? 3 : 1);
+  return (10 - s%10) % 10;
+}
+function bcGuessFormat(code){
+  const raw=String(code||'').replace(/[\s-]/g,''), d=raw.replace(/\D/g,'');
+  if(d.length!==raw.length) return 'CODE128';        // contiene lettere o simboli
+  if(d.length===14) return 'ITF14';
+  if(d.length===13 || d.length===12) return 'EAN13'; // 12 cifre = UPC-A = EAN-13 con zero davanti
+  if(d.length===8) return 'EAN8';
+  return 'CODE128';
+}
+// -> {format, value (da codificare), warn, error}
+function normalizeBarcode(rawCode, rawFormat){
+  const raw=String(rawCode||'').trim();
+  let fmt=(rawFormat||'AUTO').toUpperCase();
+  if(fmt==='AUTO') fmt=bcGuessFormat(raw);
+  const out={format:fmt, value:raw, warn:'', error:''};
+
+  if(fmt==='CODE128'){
+    // CODE128 accetta tutto senza lamentarsi, ma un numero da 8/12/13/14 cifre
+    // sulla tessera è quasi sempre un EAN/UPC: le barre sarebbero diverse da quelle vere.
+    const g=bcGuessFormat(raw);
+    if(g!=='CODE128') out.warn=`Sembra un ${g}: con CODE128 le barre sono diverse da quelle sulla tessera. Meglio scegliere ${g} (o AUTO).`;
+    return out;
+  }
+  if(fmt==='CODE39'){
+    out.value=raw.toUpperCase();
+    if(!/^[0-9A-Z\-. $/+%]+$/.test(out.value)) out.error='Caratteri non ammessi da CODE39.';
+    return out;
+  }
+
+  const target=BC_LEN[fmt];
+  if(!target) return out;
+  let d=raw.replace(/\D/g,'');
+  if(!d){ out.error='Nessuna cifra nel codice.'; return out; }
+  if(d.length!==raw.replace(/[\s-]/g,'').length) out.warn='Ho ignorato i caratteri non numerici. ';
+  out.value=d;
+
+  while(d.length>target && d[0]==='0') d=d.slice(1);   // via il padding di zeri in eccesso
+  if(d.length>target){ out.error=`${fmt} vuole ${target} cifre, qui ce ne sono ${d.length}.`; return out; }
+
+  if(d.length===target){
+    out.value=d;
+    const exp=bcCheckDigit(d.slice(0,-1));
+    if(+d[target-1]!==exp) out.warn+=`Cifra di controllo sospetta: attesa ${exp}, trovata ${d[target-1]}. Ricontrolla il numero sulla tessera.`;
+    return out;
+  }
+
+  // Codice corto: due ipotesi. Lo zero iniziale omesso ha la precedenza,
+  // perché è il caso reale delle tessere (UPC-A stampato a 12 cifre).
+  const padded=d.padStart(target,'0');
+  const paddedOk=+padded[target-1]===bcCheckDigit(padded.slice(0,-1));
+  const appended=d.length===target-1 ? d+bcCheckDigit(d) : '';
+
+  if(paddedOk){
+    out.value=padded;
+    out.warn+=`Aggiunto ${'0'.repeat(target-d.length)} davanti: ${d} → ${padded}.`;
+    if(appended) out.warn+=` (Se invece sulla tessera manca la cifra di controllo, il codice giusto è ${appended}.)`;
+    return out;
+  }
+  if(appended){
+    out.value=appended;
+    out.warn+=`Aggiunta la cifra di controllo ${appended[target-1]} in coda: ${d} → ${appended}.`;
+    return out;
+  }
+  out.error=`${fmt} vuole ${target} cifre, qui ce ne sono ${d.length}.`;
+  return out;
+}
+// Raggruppa il numero per renderlo leggibile alla cassa
+function bcPretty(v,fmt){
+  if(fmt==='EAN13' && v.length===13) return v[0]+' '+v.slice(1,7)+' '+v.slice(7);
+  if(fmt==='UPC'   && v.length===12) return v[0]+' '+v.slice(1,6)+' '+v.slice(6,11)+' '+v[11];
+  if(fmt==='EAN8'  && v.length===8)  return v.slice(0,4)+' '+v.slice(4);
+  return v;
+}
+
+function openCard(id){
+  const c = id ? state.cards.find(x=>x.id===id) : {id:'',name:'',code:'',format:'AUTO',color:CARD_COLORS[0],note:''};
+  let color=c.color||CARD_COLORS[0];
+  $('#cardSheet').innerHTML=`
+    <h2>${id?'Modifica carta':'Nuova carta'}</h2>
+    <div class="lbl">Supermercato</div><input id="c-name" class="field" value="${esc(c.name)}" placeholder="es. Supermercato">
+    <div class="lbl">Codice a barre</div><input id="c-code" class="field" value="${esc(c.code)}" placeholder="es. 8012345678907" inputmode="numeric">
+    <div class="lbl">Formato codice</div>
+    <select id="c-fmt" class="field">${BC_FORMATS.map(f=>`<option ${(c.format||'AUTO')===f?'selected':''}>${f}</option>`).join('')}</select>
+    <div class="bcchk" id="c-chk"></div>
+    <div class="lbl">Colore</div>
+    <div class="colors" id="c-colors">${CARD_COLORS.map(col=>`<button class="sw-col ${col===color?'on':''}" data-col="${col}" style="background:${col}"></button>`).join('')}</div>
+    <div class="lbl">Nota (facoltativa)</div><input id="c-note" class="field" value="${esc(c.note||'')}" placeholder="numero tessera, PIN…">
+    <button class="btn" id="c-save" style="margin-top:18px">Salva</button>
+    ${id?'<button class="btn danger" id="c-del" style="margin-top:10px">Elimina carta</button>':''}`;
+  $('#c-colors').onclick=e=>{ const b=e.target.closest('[data-col]'); if(!b) return; color=b.dataset.col;
+    $$('#c-colors .sw-col').forEach(x=>x.classList.remove('on')); b.classList.add('on'); };
+
+  // Anteprima: mostra sempre il codice che verrà REALMENTE stampato nelle barre
+  const chk=$('#c-chk');
+  const refreshChk=()=>{
+    const raw=$('#c-code').value.trim();
+    if(!raw){ chk.className='bcchk'; chk.innerHTML=''; return; }
+    const n=normalizeBarcode(raw, $('#c-fmt').value);
+    if(n.error){ chk.className='bcchk bad'; chk.innerHTML=`⚠️ ${esc(n.error)}`; return; }
+    const changed=n.value!==raw.replace(/[\s-]/g,'');
+    chk.className='bcchk '+(n.warn?'warn':'ok');
+    chk.innerHTML=`${n.warn?'⚠️':'✓'} Verrà stampato come <b>${esc(n.format)}</b>: `
+      +`<b>${esc(bcPretty(n.value,n.format))}</b>${changed?' <i>(diverso da quello che hai digitato)</i>':''}`
+      +(n.warn?`<div style="margin-top:4px">${esc(n.warn)}</div>`:'');
+  };
+  $('#c-code').oninput=refreshChk; $('#c-fmt').onchange=refreshChk; refreshChk();
+
+  $('#c-save').onclick=()=>{
+    const name=$('#c-name').value.trim(), code=$('#c-code').value.trim();
+    if(!name||!code) return;
+    const fmt=$('#c-fmt').value, note=$('#c-note').value.trim();
+    // Salvo il codice già normalizzato: la libreria non deve più "indovinare" nulla
+    const n=normalizeBarcode(code,fmt);
+    mutate(()=>{
+      const data={name, code:n.error?code:n.value, format:n.error?fmt:n.format, color, note};
+      if(id){ Object.assign(state.cards.find(y=>y.id===id), data); }
+      else state.cards.push({id:uid(), ...data});
+    });
+    close('#ov-card');
+  };
+  if(id) $('#c-del').onclick=()=>{ mutate(()=>{state.cards=state.cards.filter(y=>y.id!==id);}); close('#ov-card'); };
+  open('#ov-card');
+}
+
+function openBarcode(id){
+  const c=state.cards.find(x=>x.id===id); if(!c) return;
+  // Il numero sotto le barre è quello EFFETTIVAMENTE codificato, non l'input grezzo:
+  // se i due differiscono lo si vede subito, invece di scoprirlo alla cassa.
+  const n=normalizeBarcode(c.code, c.format);
+  $('#bcSheet').innerHTML=`
+    <div class="bchead" style="background:${esc(c.color)}">
+      <button class="x" data-close="#ov-bc">✕</button>
+      <div class="nm">${esc(c.name)}</div>
+    </div>
+    <div class="bcpanel">
+      <svg id="bcsvg"></svg>
+      <div class="num">${esc(bcPretty(n.value,n.format))}</div>
+      <div class="note" id="bcnote" style="display:none"></div>
+      ${n.warn?`<div style="color:#9a6b00;font-size:12px;margin-top:8px">${esc(n.warn)}</div>`:''}
+      ${c.note?`<div style="color:#555;font-size:12px;margin-top:10px">${esc(c.note)}</div>`:''}
+    </div>
+    <div class="bcactions"><button class="btn ghost" data-edit-card="${c.id}">Modifica</button></div>`;
+  open('#ov-bc');
+  const svg=$('#bcsvg'), note=$('#bcnote');
+  const fail=(msg)=>{ svg.style.display='none'; note.style.display='block'; note.textContent=msg; };
+  if(n.error){ fail(n.error+' Mostro solo il numero.'); return; }
+  if(typeof JsBarcode==='undefined'){ fail('Codice non disponibile offline: mostro il numero.'); return; }
+  try{
+    JsBarcode(svg, n.value, {format:n.format, width:2.6, height:120, displayValue:false, margin:0,
+      valid:(ok)=>{ if(!ok) fail('Il numero non è valido per il formato "'+n.format+'": mostro solo il numero.'); }});
+    if(!svg.childNodes.length) fail('Formato non compatibile con questo numero: mostro solo il numero.');
+  }catch(e){ fail('Formato non compatibile con questo numero: mostro solo il numero.'); }
+}
+
+// Alla cassa lo schermo non deve spegnersi mentre mostri il barcode.
+let wakeLock=null;
+function open(sel){
+  $(sel).classList.add('on');
+  if(sel==='#ov-bc' && navigator.wakeLock) navigator.wakeLock.request('screen').then(l=>{ wakeLock=l; }).catch(()=>{});
+}
+function close(sel){
+  $(sel).classList.remove('on');
+  if(sel==='#ov-bc' && wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; }
+  if(pendingRender && !busyUI()){ pendingRender=false; render(); }
+}
+
+/* ---------- events ---------- */
+// Il "+" (e Invio) non aggiunge più al volo: apre la form completa già precompilata
+// col nome digitato, così reparto/quantità/note si compilano subito.
+function addFromInput(){
+  const i=$('#addInput'); const v=i.value.trim();
+  i.value=''; i.blur();
+  openProd('', v?{name:v}:undefined);
+}
+
+document.addEventListener('click', e=>{
+  const t=e.target;
+  // add
+  if(t.closest('#addBtn')) return addFromInput();
+  if(t.closest('#newProdBtn')) return openProd('');
+  if(t.closest('#noteBtn') || t.closest('#noteBtn2')) return openNote();
+  // sort
+  const sortB=t.closest('[data-sort]'); if(sortB){ sortMode=sortB.dataset.sort; localStorage.setItem('spesa_sort',sortMode); renderSpesa(); return; }
+  // chip quick add
+  const chip=t.closest('[data-add]'); if(chip){ toggleInList(chip.dataset.add); return; }
+  // finish
+  if(t.closest('[data-undo]')){ const u=toastUndo; toastUndo=null; $('#toast').classList.remove('on','act'); if(u) u(); return; }
+  if(t.closest('#finishBtn')) return finishTrip();
+  // row actions (le righe del foglietto si comportano come le altre)
+  const row=t.closest('.row') || t.closest('.pline'); const actEl=t.closest('[data-act]');
+  if(row && actEl){
+    const id=row.dataset.id, act=actEl.dataset.act;
+    if(act==='check') return toggleChecked(id);
+    if(act==='edit') return openProd(id);
+    if(act==='toggle') return toggleInList(id);
+    if(act==='fav') return toggleFav(id);
+  }
+  // cards
+  const lc=t.closest('[data-card]'); if(lc) return openBarcode(lc.dataset.card);
+  if(t.closest('#addCardBtn')) return openCard('');
+  const ec=t.closest('[data-edit-card]'); if(ec){ close('#ov-bc'); openCard(ec.dataset.editCard); return; }
+  // close
+  const cl=t.closest('[data-close]'); if(cl) return close(cl.dataset.close);
+  // click on overlay backdrop
+  if(t.classList.contains('overlay')) return close('#'+t.id);
+});
+$('#addInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addFromInput(); });
+
+// nav
+$$('#nav button').forEach(b=>b.onclick=()=>{
+  tab=b.dataset.tab;
+  $$('#nav button').forEach(x=>x.classList.toggle('on', x===b));
+  render();
+});
+
+/* ---------- auth ---------- */
+async function doLogin(){
+  const pw=$('#pw').value; $('#loginErr').textContent='';
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:pw})});
+    if(!r.ok){ $('#loginErr').textContent='Password errata'; return; }
+    const d=await r.json(); token=d.token; localStorage.setItem('spesa_token',token);
+    boot();
+  }catch(e){ $('#loginErr').textContent='Errore di rete'; }
+}
+$('#loginBtn').onclick=doLogin;
+$('#pw').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+function logout(){ token=null; localStorage.removeItem('spesa_token'); location.reload(); }
+
+function boot(){
+  $('#login').style.display='none';
+  $('#app').style.display='block';
+  $('#nav').style.display='flex';
+  loadLocal(); render();           // mostra subito i dati locali (anche offline)
+  pull();                          // poi allinea col server
+}
+
+if(token){ boot(); }
+else { $('#login').style.display='grid'; $('#pw').focus(); }
+
+// service worker per uso offline
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+</script>
+</body>
+</html>
